@@ -1,8 +1,8 @@
- name: KCS Radio Auto Recorder
+name: CNBC Auto Recorder
 
 on:
   schedule:
-    - cron: '30 22 * * *' # ตื่นมารันเวลา 05:30 น. (เวลาไทย) ทุกวัน
+    - cron: '0 19 * * *' # ตื่นมารันเวลา 02:00 น. (เวลาไทย) ทุกวัน
   workflow_dispatch: # เปิดให้กดปุ่มสั่งรันเองแบบแมนนวลได้
 
 jobs:
@@ -20,7 +20,7 @@ jobs:
 
     - name: Install Tools & Browser
       run: |
-        pip install selenium webdriver-manager requests
+        pip install yt-dlp selenium webdriver-manager requests
         sudo apt-get update
         sudo apt-get install -y chromium-browser ffmpeg
 
