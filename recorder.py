@@ -1,36 +1,31 @@
 import os
-import time
-from datetime import datetime
 import subprocess
+from datetime import datetime
 
-# 🌟 สลับมาดึงสัญญาณวิทยุจากพอร์ตสตรีมมิ่งที่เปิดรับไอพีต่างประเทศโดยเฉพาะ
-STREAM_URL = "https://radio12.plathong.net/7356/;stream.mp3" 
-RECORD_DURATION = 2100  # อัดเสียง 35 นาที (หน่วยวินาที)
-filename = f"./kcs_radio_{datetime.now().strftime('%Y%m%d_%H%M%S')}.mp3"
+TARGET_URL = "https://livenewschat.eu/cnbc-live-stream/"
+RECORD_DURATION = 7200  # 2 ชั่วโมง (2 * 60 * 60 = 7,200 วินาที)
+filename = f"./cnbc_audio_{datetime.now().strftime('%Y%m%d_%H%M%S')}.mp3"
 
 print("🤖 เริ่มต้นทำงานระบบบันทึกเสียงอัตโนมัติ...")
-print(f"🎙️ กำลังดึงสัญญาณตรงและส่งต่อให้ ffmpeg บันทึก: {filename}")
+print(f"🎙️ กำลังดึงสัญญาณและบันทึกเสียงระยะเวลา 2 ชั่วโมง: {filename}")
 
-# ใช้พารามิเตอร์แบบเบสิกที่สุดเพื่อป้องกันอาการเปิดพอร์ตล้มเหลวบน GitHub Actions
+# ใช้ yt-dlp ดึงสตรีมจากหน้าเว็บ แล้วส่งให้ ffmpeg อัดเฉพาะเสียง (-vn)
 cmd = [
-    'ffmpeg', '-y',
-    '-i', STREAM_URL,
-    '-t', str(RECORD_DURATION),
-    '-c:a', 'copy',
-    filename
+    'yt-dlp',
+    '--downloader', 'ffmpeg',
+    '--downloader-args', f'ffmpeg:-t {RECORD_DURATION} -vn -acodec libmp3lame',
+    '-o', filename,
+    TARGET_URL
 ]
 
 try:
-    # เพิ่ม timeout ป้องกันสคริปต์ค้างเผื่อกรณีเซิร์ฟเวอร์ล่ม (บวกเผื่อให้ ffmpeg ทำงานเสร็จ 60 วินาที)
-    result = subprocess.run(cmd, capture_output=True, text=True, timeout=RECORD_DURATION + 60)
+    # เพิ่ม timeout เผื่อเวลาประมวลผลไฟล์เสร็จสิ้นอีก 180 วินาที
+    result = subprocess.run(cmd, capture_output=True, text=True, timeout=RECORD_DURATION + 180)
     
-    if result.returncode == 0:
-        if os.path.exists(filename) and os.path.getsize(filename) > 0:
-            print(f"🎉 บันทึกเสียงสำเร็จ! ขนาดไฟล์: {os.path.getsize(filename)} ไบต์")
-        else:
-            print("⚠️ ffmpeg ทำงานจบ แต่ไฟล์ที่ได้ขนาด 0 ไบต์")
+    if result.returncode == 0 and os.path.exists(filename) and os.path.getsize(filename) > 0:
+        print(f"🎉 บันทึกเสียงสำเร็จ! ขนาดไฟล์: {os.path.getsize(filename)} ไบต์")
     else:
-        print(f"❌ ffmpeg แจ้งข้อผิดพลาด (Exit code: {result.returncode})")
+        print(f"❌ เกิดข้อผิดพลาดในการบันทึก (Exit code: {result.returncode})")
         print(f"Log จากระบบ:\n{result.stderr}")
 
 except subprocess.TimeoutExpired:
