@@ -1,8 +1,8 @@
-name: KCS Radio Auto Recorder
+name: CNBC Radio Auto Recorder
 
 on:
   schedule:
-    - cron: '30 22 * * *' # ตื่นมาสั่งอัดเสียงอัตโนมัติเวลา 05:30 น. (เวลาไทย) ของทุกวัน
+    - cron: '0 19 * * *' # ตื่นมาสั่งอัดเสียงอัตโนมัติเวลา 02:00 น. (เวลาไทย) ของทุกวัน (19:00 UTC)
   workflow_dispatch: # บังคับให้แสดงปุ่มสีเขียว "Run workflow" สำหรับกดสั่งอัดเองทันทีได้
 
 jobs:
@@ -18,9 +18,9 @@ jobs:
       with:
         python-version: '3.10'
 
-    - name: Install Tools & Browser
+    - name: Install Tools & Dependencies
       run: |
-        pip install selenium webdriver-manager requests
+        pip install yt-dlp selenium webdriver-manager requests
         sudo apt-get update
         sudo apt-get install -y chromium-browser ffmpeg
 
