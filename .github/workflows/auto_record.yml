@@ -1,0 +1,49 @@
+ name: KCS Radio Auto Recorder
+
+on:
+  schedule:
+    - cron: '30 22 * * *' # ตื่นมารันเวลา 05:30 น. (เวลาไทย) ทุกวัน
+  workflow_dispatch: # เปิดให้กดปุ่มสั่งรันเองแบบแมนนวลได้
+
+jobs:
+  record_and_upload:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.10'
+
+    - name: Install Tools & Browser
+      run: |
+        pip install selenium webdriver-manager requests
+        sudo apt-get update
+        sudo apt-get install -y chromium-browser ffmpeg
+
+    - name: Run Recorder Script
+      run: |
+        python recorder.py
+
+    - name: Install Rclone
+      run: |
+        sudo apt-get install -y rclone
+
+    - name: Setup Rclone and Upload
+      run: |
+        mkdir -p ~/.config/rclone
+        cat << EOF > ~/.config/rclone/rclone.conf
+        [mydrive]
+        type = drive
+        scope = drive
+        token = ${{ secrets.RCLONE_TOKEN }}
+        EOF
+        
+        echo "=== รายชื่อไฟล์ที่บันทึกสำเร็จ ==="
+        find . -name "*.mp3"
+        
+        # กวาดเอาไฟล์เสียงที่ได้ส่งเข้าหน้าแรก Google Drive ทันที
+        rclone move ./ mydrive: --include "*.mp3" --verbose
