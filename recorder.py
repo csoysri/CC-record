@@ -1,34 +1,40 @@
 import os
 import subprocess
 from datetime import datetime
+from zoneinfo import ZoneInfo
 
-TARGET_URL = "https://livenewschat.eu/cnbc-live-stream/"
-RECORD_DURATION = 5  # ⏱️ ทดสอบบันทึก 5 วินาที
-filename = f"./cnbc_test_{datetime.now().strftime('%Y%m%d_%H%M%S')}.mp3"
+# 📍 URL สตรีมตรง (.m3u8)
+TARGET_URL = "https://cdn-fr1-eu.lncoperations.ee/hls/cnbc_live/index.m3u8" 
+RECORD_DURATION = 7200  # ⏱️ บันทึก 2 ชั่วโมง (2 * 60 * 60 = 7200 วินาที)
 
-print("🤖 เริ่มต้นทดสอบระบบบันทึกเสียงอัตโนมัติ...")
-print(f"🎙️ กำลังทดลองบันทึกเสียง 5 วินาที: {filename}")
+# 📍 บังคับใช้เวลาประเทศไทย (UTC+7)
+th_time = datetime.now(ZoneInfo("Asia/Bangkok"))
+filename = f"./cnbc_radio_{th_time.strftime('%Y%m%d_%H%M%S')}.mp3"
 
-# ใช้ yt-dlp ดึงสตรีมและตัดเฉพาะเสียง
+print("🤖 เริ่มต้นทำงานระบบบันทึกเสียงอัตโนมัติ...")
+print(f"🎙️ กำลังบันทึกเสียงสดเป็นเวลา 2 ชั่วโมง: {filename}")
+
+# 📍 ใช้ ffmpeg ดึงสตรีม m3u8 แปลงเป็น MP3
 cmd = [
-    'yt-dlp',
-    '--downloader', 'ffmpeg',
-    '--downloader-args', f'ffmpeg:-t {RECORD_DURATION} -vn -acodec libmp3lame',
-    '-o', filename,
-    TARGET_URL
+    'ffmpeg', '-y',
+    '-i', TARGET_URL,
+    '-t', str(RECORD_DURATION),
+    '-vn',                  # ตัดภาพออก เอาเฉพาะเสียง
+    '-acodec', 'libmp3lame', # แปลงเป็นรหัส MP3
+    filename
 ]
 
 try:
-    # ตั้ง timeout ไว้ 60 วินาที เผื่อเวลาเตรียมการเชื่อมต่อ
-    result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
+    # 📍 เผื่อ Timeout ไว้ 7320 วินาที (2 ชั่วโมง 2 นาที) ให้ ffmpeg ทำงานจบสมบูรณ์
+    result = subprocess.run(cmd, capture_output=True, text=True, timeout=RECORD_DURATION + 120)
     
     if result.returncode == 0 and os.path.exists(filename) and os.path.getsize(filename) > 0:
-        print(f"🎉 ทดสอบสำเร็จ! ไฟล์ขนาด: {os.path.getsize(filename)} ไบต์")
+        print(f"🎉 บันทึกสำเร็จ! ไฟล์ขนาด: {os.path.getsize(filename)} ไบต์")
     else:
         print(f"❌ เกิดข้อผิดพลาด (Exit code: {result.returncode})")
         print(f"Log จากระบบ:\n{result.stderr}")
 
 except subprocess.TimeoutExpired:
-    print("❌ สคริปต์ทำงานเกินเวลา (Timeout)")
+    print("❌ สคริปต์ทำงานเกินเวลาที่กำหนด (Timeout)")
 except Exception as e:
     print(f"❌ เกิดข้อผิดพลาดอื่น ๆ: {e}")
