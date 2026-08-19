@@ -3,29 +3,27 @@ import subprocess
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
-# 📍 URL สตรีมตรง (.m3u8)
 TARGET_URL = "https://cdn-fr1-eu.lncoperations.ee/hls/cnbc_live/index.m3u8" 
-RECORD_DURATION = 7200  # ⏱️ บันทึก 2 ชั่วโมง (2 * 60 * 60 = 7200 วินาที)
+RECORD_DURATION = 7200  # บันทึก 2 ชั่วโมง
 
-# 📍 บังคับใช้เวลาประเทศไทย (UTC+7)
 th_time = datetime.now(ZoneInfo("Asia/Bangkok"))
 filename = f"./cnbc_radio_{th_time.strftime('%Y%m%d_%H%M%S')}.mp3"
 
 print("🤖 เริ่มต้นทำงานระบบบันทึกเสียงอัตโนมัติ...")
 print(f"🎙️ กำลังบันทึกเสียงสดเป็นเวลา 2 ชั่วโมง: {filename}")
 
-# 📍 ใช้ ffmpeg ดึงสตรีม m3u8 แปลงเป็น MP3
+# 📍 เพิ่ม Header ป้องกันโดน Access Denied
 cmd = [
     'ffmpeg', '-y',
+    '-headers', 'Referer: https://livenewschat.eu/\r\nUser-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36\r\n',
     '-i', TARGET_URL,
     '-t', str(RECORD_DURATION),
-    '-vn',                  # ตัดภาพออก เอาเฉพาะเสียง
-    '-acodec', 'libmp3lame', # แปลงเป็นรหัส MP3
+    '-vn',
+    '-acodec', 'libmp3lame',
     filename
 ]
 
 try:
-    # 📍 เผื่อ Timeout ไว้ 7320 วินาที (2 ชั่วโมง 2 นาที) ให้ ffmpeg ทำงานจบสมบูรณ์
     result = subprocess.run(cmd, capture_output=True, text=True, timeout=RECORD_DURATION + 120)
     
     if result.returncode == 0 and os.path.exists(filename) and os.path.getsize(filename) > 0:
