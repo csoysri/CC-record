@@ -3,47 +3,44 @@ name: CNBC Radio Auto Recorder
 on:
   schedule:
     - cron: '0 19 * * *' # ตื่นมาสั่งอัดเสียงอัตโนมัติเวลา 02:00 น. (เวลาไทย) ของทุกวัน (19:00 UTC)
-  workflow_dispatch: # บังคับให้แสดงปุ่มสีเขียว "Run workflow" สำหรับกดสั่งอัดเองทันทีได้
+  workflow_dispatch: # ปุ่มกดสั่งรันเองแบบ Manual
 
 jobs:
   record_and_upload:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Checkout Repository
-      uses: actions/checkout@v4
+      - name: Checkout Repository
+        uses: actions/checkout@v4
 
-    - name: Set up Python
-      uses: actions/setup-python@v5
-      with:
-        python-version: '3.10'
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
 
-    - name: Install Tools & Dependencies
-      run: |
-        pip install yt-dlp selenium webdriver-manager requests
-        sudo apt-get update
-        sudo apt-get install -y chromium-browser ffmpeg
+      - name: Install Tools & Dependencies
+        run: |
+          pip install yt-dlp selenium webdriver-manager requests
+          sudo apt-get update
+          sudo apt-get install -y chromium-browser ffmpeg
 
-    - name: Run Recorder Script
-      run: |
-        python recorder.py
+      - name: Run Recorder Script
+        run: |
+          python recorder.py
 
-    - name: Install Rclone
-      run: |
-        sudo apt-get install -y rclone
+      - name: Install Rclone
+        run: |
+          sudo apt-get install -y rclone
 
-    - name: Setup Rclone and Upload
-      run: |
-        mkdir -p ~/.config/rclone
-        cat << EOF > ~/.config/rclone/rclone.conf
-        [mydrive]
-        type = drive
-        scope = drive
-        token = ${{ secrets.RCLONE_TOKEN }}
-        EOF
-        
-        echo "=== ตรวจสอบไฟล์เสียงที่อัดเสร็จ ==="
-        find . -name "*.mp3"
-        
-        # ย้ายไฟล์ทั้งหมดที่ได้เข้าสู่หน้าแรกของ Google Drive
-        rclone move ./ mydrive: --include "*.mp3" --verbose
+      - name: Setup Rclone and Upload
+        env:
+          RCLONE_CONF_DATA: ${{ secrets.RCLONE_CONFIG }}
+        run: |
+          mkdir -p ~/.config/rclone
+          echo "$RCLONE_CONF_DATA" > ~/.config/rclone/rclone.conf
+          
+          echo "=== ตรวจสอบไฟล์เสียงที่อัดเสร็จ ==="
+          find . -name "*.mp3"
+          
+          # ย้ายไฟล์ทั้งหมดที่ได้เข้าสู่ Google Drive
+          rclone move ./ mydrive: --include "*.mp3" --verbose
