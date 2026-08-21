@@ -7,8 +7,8 @@ from zoneinfo import ZoneInfo
 from google import genai
 
 TARGET_URL = "https://cdn-fr1-eu.lncoperations.ee/hls/cnbc_live/index.m3u8" 
-RECORD_DURATION = 7200   # เวลาบันทึกรวม: 7200 วินาที (2 ชั่วโมง)
-SEGMENT_DURATION = 420  # เวลาตัดแบ่งแต่ละไฟล์: 420 วินาที (7 นาที)
+RECORD_DURATION = 30   # เวลาบันทึกรวม: 7200 วินาที (2 ชั่วโมง)
+SEGMENT_DURATION = 15  # เวลาตัดแบ่งแต่ละไฟล์: 420 วินาที (7 นาที)
 
 # ดึง API Key จาก Environment Variable ของระบบ (ปลอดภัยกว่าใส่ตรงๆ)
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
