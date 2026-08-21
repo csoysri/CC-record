@@ -3,36 +3,49 @@ import subprocess
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
-TARGET_URL = "https://cdn-fr1-eu.lncoperations.ee/hls/cnbc_live/index.m3u8" 
-RECORD_DURATION = 7200  # บันทึก 2 ชั่วโมง
+TARGET_URL = "https://cdn-fr1-eu.lncoperations.ee/hls/cnbc_live/index.m3u8"
+
+# 💡 แนะนำ: ทดสอบด้วยเวลาสั้นๆ ก่อน เช่น 30 วินาที แล้วค่อยเปลี่ยนกลับเป็น 7200
+RECORD_DURATION = 30  # วินาที (เปลี่ยนเป็น 7200 เมื่อทดสอบผ่านแล้ว)
 
 th_time = datetime.now(ZoneInfo("Asia/Bangkok"))
 filename = f"./cnbc_radio_{th_time.strftime('%Y%m%d_%H%M%S')}.mp3"
 
 print("🤖 เริ่มต้นทำงานระบบบันทึกเสียงอัตโนมัติ...")
-print(f"🎙️ กำลังบันทึกเสียงสดเป็นเวลา 2 ชั่วโมง: {filename}")
+print(f"🎙️ กำลังบันทึกเสียงเป็นเวลา {RECORD_DURATION} วินาที: {filename}")
 
-# 📍 เพิ่ม Header ป้องกันโดน Access Denied
+# Header และ Option สำหรับป้องกัน Stream หลุด/ค้าง
+headers = (
+    "Referer: https://livenewschat.eu/\r\n"
+    "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36\r\n"
+)
+
 cmd = [
     'ffmpeg', '-y',
-    '-headers', 'Referer: https://livenewschat.eu/\r\nUser-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36\r\n',
+    # จัดการ network หาก stream สะดุด
+    '-reconnect', '1',
+    '-reconnect_streamed', '1',
+    '-reconnect_delay_max', '5',
+    '-headers', headers,
     '-i', TARGET_URL,
     '-t', str(RECORD_DURATION),
     '-vn',
     '-acodec', 'libmp3lame',
+    '-ab', '128k',
     filename
 ]
 
 try:
-    result = subprocess.run(cmd, capture_output=True, text=True, timeout=RECORD_DURATION + 120)
+    # นำ capture_output=True ออก เพื่อให้แสดง log ของ ffmpeg บนหน้าจอ terminal ทันที
+    result = subprocess.run(cmd, timeout=RECORD_DURATION + 60)
     
     if result.returncode == 0 and os.path.exists(filename) and os.path.getsize(filename) > 0:
-        print(f"🎉 บันทึกสำเร็จ! ไฟล์ขนาด: {os.path.getsize(filename)} ไบต์")
+        file_size_kb = os.path.getsize(filename) / 1024
+        print(f"\n🎉 บันทึกสำเร็จ! ไฟล์: {filename} (ขนาด: {file_size_kb:.2f} KB)")
     else:
-        print(f"❌ เกิดข้อผิดพลาด (Exit code: {result.returncode})")
-        print(f"Log จากระบบ:\n{result.stderr}")
+        print(f"\n❌ เกิดข้อผิดพลาด (Exit code: {result.returncode})")
 
 except subprocess.TimeoutExpired:
-    print("❌ สคริปต์ทำงานเกินเวลาที่กำหนด (Timeout)")
+    print("\n❌ สคริปต์ทำงานเกินเวลาที่กำหนด (Timeout)")
 except Exception as e:
-    print(f"❌ เกิดข้อผิดพลาดอื่น ๆ: {e}")
+    print(f"\n❌ เกิดข้อผิดพลาดอื่น ๆ: {e}")
