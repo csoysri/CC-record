@@ -11,8 +11,8 @@ from google import genai
 TARGET_URL = "https://cdn-fr1-eu.lncoperations.ee/hls/cnbc_live/index.m3u8" 
 
 # 🛠️ ตั้งค่าเวลาใช้งานจริง: อัด 2 ชั่วโมง (7200 วินาที) / ตัดท่อนละ 7 นาที (420 วินาที)
-RECORD_DURATION = 7200   # (หากต้องการทดสอบ ให้แก้เป็น 30)
-SEGMENT_DURATION = 420  # (หากต้องการทดสอบ ให้แก้เป็น 15)
+RECORD_DURATION = 30   # (หากต้องการทดสอบ ให้แก้เป็น 30)
+SEGMENT_DURATION = 15  # (หากต้องการทดสอบ ให้แก้เป็น 15)
 
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 client = genai.Client(api_key=GEMINI_API_KEY) if GEMINI_API_KEY else None
