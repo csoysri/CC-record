@@ -41,8 +41,10 @@ jobs:
           mkdir -p ~/.config/rclone
           echo "$RCLONE_CONF_DATA" > ~/.config/rclone/rclone.conf
           
-          echo "=== ตรวจสอบไฟล์ทั้งหมดที่จะอัปโหลด ==="
-          ls -lh
+          # 📁 กำหนดชื่อโฟลเดอร์ตามวันที่ไทย เช่น CNBC/2026-08-21
+          TARGET_FOLDER="CNBC/$(TZ='Asia/Bangkok' date +'%Y-%m-%d')"
           
-          # ย้ายทั้งไฟล์ .mp3 (เสียงอังกฤษ + เสียงอ่านไทย) และไฟล์ .txt ขึ้น Google Drive
-          rclone move ./ mydrive: --include "*.mp3" --include "*.txt" --verbose
+          echo "=== กำลังย้ายไฟล์ทั้งหมดเข้าโฟลเดอร์: $TARGET_FOLDER ==="
+          
+          # ย้ายไฟล์ทั้งหมดเข้าโฟลเดอร์ประจำวันใน Google Drive
+          rclone move ./ "mydrive:$TARGET_FOLDER" --include "*.mp3" --include "*.txt" --verbose
