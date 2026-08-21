@@ -2,15 +2,18 @@ import os
 import subprocess
 import glob
 import time
+import asyncio
+import edge_tts
 from datetime import datetime
 from zoneinfo import ZoneInfo
 from google import genai
 
 TARGET_URL = "https://cdn-fr1-eu.lncoperations.ee/hls/cnbc_live/index.m3u8" 
-RECORD_DURATION = 30   # เวลาบันทึกรวม: 7200 วินาที (2 ชั่วโมง)
-SEGMENT_DURATION = 15  # เวลาตัดแบ่งแต่ละไฟล์: 420 วินาที (7 นาที)
 
-# ดึง API Key จาก Environment Variable ของระบบ (ปลอดภัยกว่าใส่ตรงๆ)
+# 🛠️ ตั้งค่าเวลาใช้งานจริง: อัด 2 ชั่วโมง (7200 วินาที) / ตัดท่อนละ 7 นาที (420 วินาที)
+RECORD_DURATION = 7200   # (หากต้องการทดสอบ ให้แก้เป็น 30)
+SEGMENT_DURATION = 420  # (หากต้องการทดสอบ ให้แก้เป็น 15)
+
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 client = genai.Client(api_key=GEMINI_API_KEY) if GEMINI_API_KEY else None
 
@@ -42,8 +45,8 @@ def record_stream(output_filename, duration):
     return result.returncode == 0 and os.path.exists(output_filename) and os.path.getsize(output_filename) > 0
 
 def split_audio(input_file, date_prefix, segment_time=420):
-    """ฟังก์ชันตัดไฟล์เสียงออกเป็นท่อนๆ ละ 7 นาที"""
-    print(f"\n✂️ กำลังตัดแบ่งไฟล์ '{input_file}' เป็นท่อนละ 7 นาที...")
+    """ฟังก์ชันตัดแบ่งไฟล์เสียง"""
+    print(f"\n✂️ กำลังตัดแบ่งไฟล์ '{input_file}' เป็นท่อนละ {segment_time} วินาที...")
     output_pattern = f"./{date_prefix}_part_%03d.mp3"
     
     cmd = [
@@ -59,35 +62,54 @@ def split_audio(input_file, date_prefix, segment_time=420):
     print(f"🎉 ตัดไฟล์สำเร็จ! ได้ทั้งหมด {len(segments)} ไฟล์")
     return segments
 
-def transcribe_and_translate(audio_path):
-    """ฟังก์ชันส่งไฟล์เสียงไปให้ Gemini ถอดความและแปลไทย"""
+def transcribe_and_translate(audio_path, max_retries=3):
+    """ฟังก์ชันส่งไฟล์เสียงไปแปลไทย (ภาษาไทยล้วน) พร้อมระบบลองใหม่อัตโนมัติ"""
     if not client:
         print("⚠️ ไม่พบ GEMINI_API_KEY ข้ามการแปลภาษา")
         return None
 
     print(f"🤖 กำลังให้ AI ฟังและแปลไฟล์: {audio_path}...")
+    
+    for attempt in range(1, max_retries + 1):
+        try:
+            audio_file = client.files.upload(file=audio_path)
+            
+            prompt = """
+            คุณเป็นนักแปลและผู้ประกาศข่าวเศรษฐกิจมืออาชีพ:
+            1. แปลและสรุปเนื้อหาข่าวทั้งหมดออกมาเป็น "ภาษาไทยล้วนเท่านั้น"
+            2. ห้ามใส่ข้อความภาษาอังกฤษต้นฉบับ ห้ามเขียนอังกฤษกำกับ (ยกเว้นชื่อเฉพาะหรือชื่อบริษัท/หุ้น)
+            3. เรียบเรียงเป็นประโยคที่สละสลวย กระชับ เหมาะสำหรับการอ่านออกเสียงให้ผู้ฟังเข้าใจทันที
+            """
+            
+            response = client.models.generate_content(
+                model='gemini-3.6-flash',
+                contents=[audio_file, prompt]
+            )
+            
+            client.files.delete(name=audio_file.name)
+            return response.text
+            
+        except Exception as e:
+            print(f"⚠️ ครั้งที่ {attempt} พบปัญหา ({e})")
+            if attempt < max_retries:
+                wait_sec = attempt * 5
+                print(f"⏳ กำลังรอ {wait_sec} วินาทีก่อนลองใหม่อัตโนมัติ...")
+                time.sleep(wait_sec)
+            else:
+                print(f"❌ แปลไฟล์ {audio_path} ล้มเหลวหลังจากลองครบ {max_retries} ครั้ง")
+                return None
+
+async def text_to_speech_thai(text, output_audio_path):
+    """ฟังก์ชัน AI สังเคราะห์เสียงอ่านข่าวภาษาไทย (ใช้เสียงพากย์ผู้ประกาศข่าว)"""
+    print(f"🗣️ กำลังสร้างเสียง AI อ่านข่าวไทย: {output_audio_path}...")
     try:
-        # อัปโหลดไฟล์เสียงไปที่ Gemini
-        audio_file = client.files.upload(file=audio_path)
-        
-        prompt = """
-        คุณเป็นนักแปลข่าวเศรษฐกิจและการเงินมืออาชีพ:
-        1. กรุณาถอดความสิ่งที่ผู้พูดในเสียงพูด
-        2. แปลและสรุปเนื้อหาสำคัญออกมาเป็น 'ภาษาไทย' ที่เข้าใจง่าย แบ่งเป็นหัวข้อย่อย (Bullet points) ชัดเจน
-        """
-        
-        response = client.models.generate_content(
-            model='gemini-3.6-flash',
-            contents=[audio_file, prompt]
-        )
-        
-        # ลบไฟล์ออกจากเซิร์ฟเวอร์ Gemini ชั่วคราวหลังประมวลผลเสร็จ
-        client.files.delete(name=audio_file.name)
-        
-        return response.text
+        # ใช้เสียงพากย์ Neural: 'th-TH-PremwadeeNeural' (เสียงผู้หญิง) หรือ 'th-TH-NiwatNeural' (เสียงผู้ชาย)
+        voice = "th-TH-PremwadeeNeural"
+        tts = edge_tts.Communicate(text, voice)
+        await tts.save(output_audio_path)
+        print(f"✅ บันทึกไฟล์เสียงพากย์ไทยสำเร็จ: {output_audio_path}")
     except Exception as e:
-        print(f"❌ เกิดข้อผิดพลาดในการแปลไฟล์ {audio_path}: {e}")
-        return None
+        print(f"❌ สังเคราะห์เสียงอ่านข่าวล้มเหลว: {e}")
 
 # ==================== ลำดับการทำงานหลัก ====================
 if __name__ == "__main__":
@@ -95,28 +117,32 @@ if __name__ == "__main__":
     date_str = th_time.strftime('%Y%m%d_%H%M%S')
     main_file = f"./raw_cnbc_{date_str}.mp3"
 
-    # 1. บันทึกเสียง
+    # 1. อัดเสียง
     success = record_stream(main_file, RECORD_DURATION)
 
     if success:
         print(f"✅ บันทึกไฟล์หลักสำเร็จ: {main_file}")
         
-        # 2. ตัดแบ่งไฟล์ท่อนละ 7 นาที
+        # 2. ตัดแบ่งไฟล์
         segment_files = split_audio(main_file, date_str, SEGMENT_DURATION)
         
-        # 3. วนลูปส่งแต่ละไฟล์ไปแปลไทย และเซฟเป็นไฟล์ .txt
-        print("\n🌐 เริ่มต้นการแปลภาษาด้วย Gemini...")
+        # 3. แปลภาษาไทย + สร้างเสียงอ่านข่าวภาษาไทย
+        print("\n🌐 เริ่มต้นกระบวนการแปลและสร้างเสียงอ่านข่าวไทย...")
         for seg in segment_files:
             th_text = transcribe_and_translate(seg)
             if th_text:
+                # 3.1 บันทึกเป็นไฟล์ข้อความ .txt
                 txt_filename = seg.replace(".mp3", "_แปลไทย.txt")
                 with open(txt_filename, "w", encoding="utf-8") as f:
                     f.write(th_text)
                 print(f"💾 บันทึกคำแปลเรียบร้อย: {txt_filename}")
+                
+                # 3.2 สร้างไฟล์เสียงอ่านข่าวภาษาไทย .mp3
+                tts_filename = seg.replace(".mp3", "_อ่านข่าวไทย.mp3")
+                asyncio.run(text_to_speech_thai(th_text, tts_filename))
             
-            # พัก 3 วินาที เพื่อไม่ให้ยิงคำขอถี่เกินไป
-            time.sleep(3)
+            time.sleep(2)
             
-        print("\n✨ ประมวลผลเสร็จสิ้นครบทุกขั้นตอน!")
+        print("\n✨ ประมวลผลครบทุกขั้นตอน พร้อมฟังใน Google Drive ทันที!")
     else:
         print("❌ การบันทึกเสียงล้มเหลว")
