@@ -2,8 +2,8 @@ name: CNBC Radio Auto Recorder
 
 on:
   schedule:
-    - cron: '0 19 * * *' # ตื่นมาสั่งอัดเสียงอัตโนมัติเวลา 02:00 น. (เวลาไทย) ของทุกวัน (19:00 UTC)
-  workflow_dispatch: # ปุ่มกดสั่งรันเองแบบ Manual
+    - cron: '0 19 * * *' # รันตี 2 ทุกวัน
+  workflow_dispatch:
 
 jobs:
   record_and_upload:
@@ -20,11 +20,13 @@ jobs:
 
       - name: Install Tools & Dependencies
         run: |
-          pip install yt-dlp selenium webdriver-manager requests
+          pip install yt-dlp selenium webdriver-manager requests google-genai
           sudo apt-get update
           sudo apt-get install -y chromium-browser ffmpeg
 
       - name: Run Recorder Script
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: |
           python recorder.py
 
@@ -39,8 +41,8 @@ jobs:
           mkdir -p ~/.config/rclone
           echo "$RCLONE_CONF_DATA" > ~/.config/rclone/rclone.conf
           
-          echo "=== ตรวจสอบไฟล์เสียงที่อัดเสร็จ ==="
-          find . -name "*.mp3"
+          echo "=== ตรวจสอบไฟล์ทั้งหมดที่จะอัปโหลด ==="
+          ls -lh
           
-          # ย้ายไฟล์ทั้งหมดที่ได้เข้าสู่ Google Drive
-          rclone move ./ mydrive: --include "*.mp3" --verbose
+          # ย้ายทั้งไฟล์ .mp3 และไฟล์สรุป .txt ขึ้น Google Drive
+          rclone move ./ mydrive: --include "*.mp3" --include "*.txt" --verbose
