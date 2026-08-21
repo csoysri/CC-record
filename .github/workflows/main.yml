@@ -2,7 +2,7 @@ name: CNBC Radio Auto Recorder
 
 on:
   schedule:
-    - cron: '0 19 * * *' # รันตี 2 ทุกวัน
+    - cron: '0 19 * * *' # รันตี 2 ทุกวัน (เวลาไทย)
   workflow_dispatch:
 
 jobs:
@@ -20,7 +20,7 @@ jobs:
 
       - name: Install Tools & Dependencies
         run: |
-          pip install yt-dlp selenium webdriver-manager requests google-genai
+          pip install yt-dlp selenium webdriver-manager requests google-genai edge-tts
           sudo apt-get update
           sudo apt-get install -y chromium-browser ffmpeg
 
@@ -44,5 +44,5 @@ jobs:
           echo "=== ตรวจสอบไฟล์ทั้งหมดที่จะอัปโหลด ==="
           ls -lh
           
-          # ย้ายทั้งไฟล์ .mp3 และไฟล์สรุป .txt ขึ้น Google Drive
+          # ย้ายทั้งไฟล์ .mp3 (เสียงอังกฤษ + เสียงอ่านไทย) และไฟล์ .txt ขึ้น Google Drive
           rclone move ./ mydrive: --include "*.mp3" --include "*.txt" --verbose
