@@ -14,7 +14,7 @@ TARGET_URL = "https://cdn-fr1-eu.lncoperations.ee/hls/cnbc_live/index.m3u8"
 RECORD_DURATION = 10800   # (หากต้องการทดสอบ ให้แก้เป็น 30)
 SEGMENT_DURATION = 420    # (หากต้องการทดสอบ ให้แก้เป็น 15)
 
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+GEMINI_API_KEY = os.getenv("AQ.Ab8RN6J9aKcsRatyM60NWd6V_xCd_bKWlIl4XxxRT3gva8WGJw")
 client = genai.Client(api_key=GEMINI_API_KEY) if GEMINI_API_KEY else None
 
 def record_stream(output_filename, duration):
