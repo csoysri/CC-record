@@ -10,7 +10,7 @@ from google import genai
 
 TARGET_URL = "https://cdn-fr1-eu.lncoperations.ee/hls/cnbc_live/index.m3u8" 
 
-# 🛠️ ตั้งค่าเวลาใช้งานจริง: อัด 3 ชั่วโมง (10800 วินาที) / ตัดท่อนละ 7 นาที (420 วินาที)
+# 🛠️ ตั้งค่าเวลา: อัด 3 ชั่วโมง (10800 วินาที) / ตัดท่อนละ 7 นาที (420 วินาที)
 RECORD_DURATION = 10800   # (หากต้องการทดสอบ ให้แก้เป็น 30)
 SEGMENT_DURATION = 420    # (หากต้องการทดสอบ ให้แก้เป็น 15)
 
@@ -18,9 +18,9 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 client = genai.Client(api_key=GEMINI_API_KEY) if GEMINI_API_KEY else None
 
 def record_stream(output_filename, duration):
-    """ฟังก์ชันอัดเสียงสดจาก CNBC"""
+    """ฟังก์ชันอัดเสียงสดจาก CNBC เป็นไฟล์ .ogg"""
     print("🤖 เริ่มต้นทำงานระบบบันทึกเสียงอัตโนมัติ...")
-    print(f"🎙️ กำลังบันทึกเสียงเป็นเวลา {duration} วินาที...")
+    print(f"🎙️ กำลังบันทึกเสียงเป็นไฟล์ OGG เป็นเวลา {duration} วินาที...")
     
     headers = (
         "Referer: https://livenewschat.eu/\r\n"
@@ -36,8 +36,8 @@ def record_stream(output_filename, duration):
         '-i', TARGET_URL,
         '-t', str(duration),
         '-vn',
-        '-acodec', 'libmp3lame',
-        '-ab', '128k',
+        '-c:a', 'libvorbis',   # 👈 ใช้ Vorbis Codec สำหรับไฟล์ .ogg
+        '-b:a', '128k',
         output_filename
     ]
     
@@ -45,9 +45,9 @@ def record_stream(output_filename, duration):
     return result.returncode == 0 and os.path.exists(output_filename) and os.path.getsize(output_filename) > 0
 
 def split_audio(input_file, date_prefix, segment_time=420):
-    """ฟังก์ชันตัดแบ่งไฟล์เสียง"""
+    """ฟังก์ชันตัดแบ่งไฟล์เสียง .ogg"""
     print(f"\n✂️ กำลังตัดแบ่งไฟล์ '{input_file}' เป็นท่อนละ {segment_time} วินาที...")
-    output_pattern = f"./{date_prefix}_part_%03d.mp3"
+    output_pattern = f"./{date_prefix}_part_%03d.ogg"  # 👈 นามสกุล .ogg
     
     cmd = [
         'ffmpeg', '-y',
@@ -58,12 +58,12 @@ def split_audio(input_file, date_prefix, segment_time=420):
         output_pattern
     ]
     subprocess.run(cmd, check=True)
-    segments = sorted(glob.glob(f"./{date_prefix}_part_*.mp3"))
+    segments = sorted(glob.glob(f"./{date_prefix}_part_*.ogg"))  # 👈 ดึงไฟล์ .ogg
     print(f"🎉 ตัดไฟล์สำเร็จ! ได้ทั้งหมด {len(segments)} ไฟล์\n")
     return segments
 
 def transcribe_and_translate(audio_path, max_retries=3):
-    """ฟังก์ชันส่งไฟล์เสียงไปแปลไทย (ภาษาไทยล้วน) พร้อมระบบลองใหม่อัตโนมัติ"""
+    """ฟังก์ชันส่งไฟล์เสียงไปแปลไทย (Gemini รองรับ OGG ได้โดยตรง)"""
     if not client:
         print("  ⚠️ ไม่พบ GEMINI_API_KEY ข้ามการแปลภาษา")
         return None
@@ -72,6 +72,7 @@ def transcribe_and_translate(audio_path, max_retries=3):
     
     for attempt in range(1, max_retries + 1):
         try:
+            # Gemini File API รองรับ audio/ogg อัตโนมัติ
             audio_file = client.files.upload(file=audio_path)
             
             prompt = """
@@ -109,7 +110,6 @@ async def text_to_speech_thai(text, output_audio_path):
     """ฟังก์ชัน AI สังเคราะห์เสียงอ่านข่าวภาษาไทย"""
     print(f"  🗣️ [3/3] กำลังสร้างไฟล์เสียงอ่านข่าวไทย: {output_audio_path}...")
     try:
-        # ใช้เสียงพากย์ Neural: 'th-TH-PremwadeeNeural' (เสียงผู้หญิง) หรือ 'th-TH-NiwatNeural' (เสียงผู้ชาย)
         voice = "th-TH-PremwadeeNeural"
         tts = edge_tts.Communicate(text, voice)
         await tts.save(output_audio_path)
@@ -118,26 +118,26 @@ async def text_to_speech_thai(text, output_audio_path):
         print(f"  ❌ สังเคราะห์เสียงอ่านข่าวล้มเหลว: {e}")
 
 def process_single_file(seg_path, current_idx, total_files):
-    """ประมวลผลจบครบวงจรในไฟล์เดียว: ถอดความ -> แปล -> บันทึก txt -> สร้างเสียงพากย์ไทย"""
+    """ประมวลผลจบครบวงจรในไฟล์เดียว"""
     print(f"==================================================")
     print(f"🔄 กำลังประมวลผลไฟล์ [{current_idx}/{total_files}]: {os.path.basename(seg_path)}")
     print(f"==================================================")
 
-    # ขั้นตอนที่ 1: ถอดความและแปลเป็นภาษาไทย
+    # 1. ถอดความและแปลเป็นภาษาไทย
     th_text = transcribe_and_translate(seg_path)
     
     if not th_text:
         print(f"⚠️ ข้ามไฟล์ {seg_path} เนื่องจากไม่ได้รับผลลัพธ์คำแปล\n")
         return
 
-    # ขั้นตอนที่ 2: บันทึกเป็นไฟล์ข้อความ .txt
-    txt_filename = seg_path.replace(".mp3", "_แปลไทย.txt")
+    # 2. บันทึกเป็นไฟล์ข้อความ .txt
+    txt_filename = seg_path.replace(".ogg", "_แปลไทย.txt")
     with open(txt_filename, "w", encoding="utf-8") as f:
         f.write(th_text)
     print(f"  💾 [2/3] บันทึกคำแปลข้อความ: {txt_filename}")
 
-    # ขั้นตอนที่ 3: สังเคราะห์เสียงอ่านข่าวภาษาไทย .mp3
-    tts_filename = seg_path.replace(".mp3", "_อ่านข่าวไทย.mp3")
+    # 3. สังเคราะห์เสียงอ่านข่าวภาษาไทย (.mp3)
+    tts_filename = seg_path.replace(".ogg", "_อ่านข่าวไทย.mp3")
     asyncio.run(text_to_speech_thai(th_text, tts_filename))
 
     print(f"🎉 เสร็จสิ้นขั้นตอนของไฟล์ [{current_idx}/{total_files}]\n")
@@ -146,7 +146,7 @@ def process_single_file(seg_path, current_idx, total_files):
 if __name__ == "__main__":
     th_time = datetime.now(ZoneInfo("Asia/Bangkok"))
     date_str = th_time.strftime('%Y%m%d_%H%M%S')
-    main_file = f"./raw_cnbc_{date_str}.mp3"
+    main_file = f"./raw_cnbc_{date_str}.ogg"  # 👈 นามสกุลไฟล์หลักเป็น .ogg
 
     # 1. อัดเสียงสด
     success = record_stream(main_file, RECORD_DURATION)
@@ -158,11 +158,11 @@ if __name__ == "__main__":
         segment_files = split_audio(main_file, date_str, SEGMENT_DURATION)
         total_segments = len(segment_files)
         
-        # 3. วนลูปทำทีละไฟล์ (ถอดความ -> แปล -> สร้างเสียงพากย์)
+        # 3. วนลูปประมวลผลทีละไฟล์
         print("🌐 เริ่มต้นกระบวนการประมวลผลทีละไฟล์ตามลำดับ...")
         for idx, seg in enumerate(segment_files, start=1):
             process_single_file(seg, idx, total_segments)
-            time.sleep(2) # หน่วงเวลาเล็กน้อยระหว่างไฟล์
+            time.sleep(2)
             
         print("✨ ประมวลผลครบทุกไฟล์เรียบร้อยแล้ว!")
     else:
