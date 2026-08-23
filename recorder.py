@@ -78,4 +78,78 @@ def transcribe_and_translate(audio_path, max_retries=3):
     
     for attempt in range(1, max_retries + 1):
         try:
-            audio_file = client.files.upload(file=audio
+            audio_file = client.files.upload(file=audio_path)
+            
+            prompt = """
+            คำสั่งสำคัญที่สุด: ผลลัพธ์ของคุณต้องเป็น "ภาษาไทยล้วน 100%" เท่านั้น
+            1. ฟังเสียงพูดภาษาอังกฤษทั้งหมด แล้วแปลบทพูดทุกประโยคออกมาเป็นภาษาไทยโดยตรง
+            2. ห้ามพิมพ์ภาษาอังกฤษต้นฉบับออกมาเด็ดขาด
+            3. ห้ามทำรูปแบบประโยคภาษาอังกฤษสลับกับภาษาไทย (Bilingual)
+            4. แปลถ่ายทอดเนื้อหาคำพูดและบทวิเคราะห์ให้ครบถ้วนทุกประโยคตั้งแต่ต้นจนจบ
+            5. ไม่ต้องใส่ตัวเลขเวลา (Timestamp)
+            6. ให้ส่งออกเฉพาะข้อความภาษาไทยที่อ่านได้อย่างต่อเนื่อง สละสลวย เท่านั้น
+            """
+            
+            response = client.models.generate_content(
+                model='gemini-2.5-flash',
+                contents=[audio_file, prompt]
+            )
+            
+            client.files.delete(name=audio_file.name)
+            return response.text
+            
+        except Exception as e:
+            print(f"  ⚠️ ครั้งที่ {attempt} พบปัญหา ({e})")
+            if attempt < max_retries:
+                time.sleep(attempt * 5)
+            else:
+                return None
+
+async def text_to_speech_thai(text, output_audio_path):
+    """สร้างไฟล์เสียงอ่านข่าวไทย"""
+    print(f"  🗣️ [3/3] กำลังสร้างไฟล์เสียงอ่านข่าวไทย: {output_audio_path}...")
+    try:
+        voice = "th-TH-PremwadeeNeural"
+        tts = edge_tts.Communicate(text, voice)
+        await tts.save(output_audio_path)
+        print(f"  ✅ บันทึกเสียงพากย์ไทยสำเร็จ!")
+    except Exception as e:
+        print(f"  ❌ สังเคราะห์เสียงอ่านข่าวล้มเหลว: {e}")
+
+def process_single_file(seg_path, current_idx, total_files):
+    print(f"==================================================")
+    print(f"🔄 กำลังประมวลผลไฟล์ [{current_idx}/{total_files}]: {os.path.basename(seg_path)}")
+    print(f"==================================================")
+
+    th_text = transcribe_and_translate(seg_path)
+    if not th_text:
+        return
+
+    txt_filename = seg_path.replace(".mp3", "_แปลไทย.txt")
+    with open(txt_filename, "w", encoding="utf-8") as f:
+        f.write(th_text)
+    print(f"  💾 [2/3] บันทึกคำแปลข้อความ: {txt_filename}")
+
+    tts_filename = seg_path.replace(".mp3", "_อ่านข่าวไทย.mp3")
+    asyncio.run(text_to_speech_thai(th_text, tts_filename))
+    print(f"🎉 เสร็จสิ้นขั้นตอนของไฟล์ [{current_idx}/{total_files}]\n")
+
+if __name__ == "__main__":
+    th_time = datetime.now(ZoneInfo("Asia/Bangkok"))
+    date_str = th_time.strftime('%Y%m%d_%H%M%S')
+    main_file = f"./raw_cnbc_{date_str}.mp3"
+
+    success = record_stream(main_file, RECORD_DURATION)
+
+    if success:
+        print(f"✅ บันทึกไฟล์หลักสำเร็จ: {main_file}")
+        segment_files = split_audio(main_file, date_str, SEGMENT_DURATION)
+        total_segments = len(segment_files)
+        
+        for idx, seg in enumerate(segment_files, start=1):
+            process_single_file(seg, idx, total_segments)
+            time.sleep(2)
+            
+        print("✨ ประมวลผลครบทุกไฟล์เรียบร้อยแล้ว!")
+    else:
+        print("❌ การบันทึกเสียงล้มเหลว")
