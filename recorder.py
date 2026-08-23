@@ -11,8 +11,8 @@ from google import genai
 TARGET_URL = "https://cdn-fr1-eu.lncoperations.ee/hls/cnbc_live/index.m3u8" 
 
 # 🛠️ ตั้งเวลาทดสอบ: อัด 30 วินาที / ตัดท่อนละ 15 วินาที
-RECORD_DURATION = 30   
-SEGMENT_DURATION = 15  
+RECORD_DURATION = 10800  
+SEGMENT_DURATION = 420  
 
 # 🔑 ดึง Key จาก GitHub Secret อัตโนมัติ
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
@@ -92,7 +92,7 @@ def transcribe_and_translate(audio_path, max_retries=3):
             """
             
             response = client.models.generate_content(
-                model='gemini-3.5-flash',
+                model='gemini-3.5-flash-lite',
                 contents=[audio_file, prompt]
             )
             
