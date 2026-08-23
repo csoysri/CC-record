@@ -17,23 +17,27 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.10'
+          cache: 'pip'
 
-      - name: Install Tools & Dependencies
+      # ⚡ ติดตั้งเฉพาะแพ็กเกจที่โค้ด recorder.py ใช้งานจริง
+      - name: Install Dependencies
         run: |
-          pip install yt-dlp selenium webdriver-manager requests google-genai edge-tts
-          sudo apt-get update
-          sudo apt-get install -y chromium-browser ffmpeg
+          pip install --upgrade pip
+          pip install google-genai edge-tts
 
+      # 🎙️ รันโปรแกรมบันทึกเสียง แปลภาษา และพากย์เสียง
       - name: Run Recorder Script
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: |
           python recorder.py
 
+      # ☁️ ติดตั้ง Rclone ผ่าน Official Script (เร็วกว่า apt)
       - name: Install Rclone
         run: |
-          sudo apt-get install -y rclone
+          sudo -v ; curl https://rclone.org/install.sh | sudo bash
 
+      # 📤 อัปโหลดไฟล์ผลลัพธ์ขึ้น Google Drive
       - name: Setup Rclone and Upload
         env:
           RCLONE_CONF_DATA: ${{ secrets.RCLONE_CONFIG }}
@@ -41,10 +45,10 @@ jobs:
           mkdir -p ~/.config/rclone
           echo "$RCLONE_CONF_DATA" > ~/.config/rclone/rclone.conf
           
-          # 📁 กำหนดชื่อโฟลเดอร์ตามวันที่ไทย เช่น CNBC/2026-08-21
+          # 📁 กำหนดชื่อโฟลเดอร์ตามวันที่ไทย เช่น CNBC/2026-08-23
           TARGET_FOLDER="CNBC/$(TZ='Asia/Bangkok' date +'%Y-%m-%d')"
           
           echo "=== กำลังย้ายไฟล์ทั้งหมดเข้าโฟลเดอร์: $TARGET_FOLDER ==="
           
-          # ย้ายไฟล์ทั้งหมดเข้าโฟลเดอร์ประจำวันใน Google Drive
-          rclone move ./ "mydrive:$TARGET_FOLDER" --include "*.mp3" --include "*.txt" --verbose
+          # ย้ายไฟล์เสียงและข้อความทั้งหมดขึ้น Drive (รองรับทั้ง mp3, ogg, txt)
+          rclone move ./ "mydrive:$TARGET_FOLDER" --include "*.mp3" --include "*.ogg" --include "*.txt" --verbose
