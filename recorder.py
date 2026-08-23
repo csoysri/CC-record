@@ -88,10 +88,11 @@ def transcribe_and_translate(audio_path, max_retries=3):
             4. แปลถ่ายทอดเนื้อหาคำพูดและบทวิเคราะห์ให้ครบถ้วนทุกประโยคตั้งแต่ต้นจนจบ
             5. ไม่ต้องใส่ตัวเลขเวลา (Timestamp)
             6. ให้ส่งออกเฉพาะข้อความภาษาไทยที่อ่านได้อย่างต่อเนื่อง สละสลวย เท่านั้น
+            7. ลบภาษาอังกฤษออก
             """
             
             response = client.models.generate_content(
-                model='gemini-2.5-flash',
+                model='gemini-3.5-flash',
                 contents=[audio_file, prompt]
             )
             
