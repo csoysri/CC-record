@@ -50,7 +50,12 @@ jobs:
           mkdir -p ~/.config/rclone
           echo "$RCLONE_CONF_DATA" > ~/.config/rclone/rclone.conf
           
-          TARGET_FOLDER="CNBC/$(TZ='Asia/Bangkok' date +'%Y-%m-%d')"
+          # กำหนดชื่อโฟลเดอร์วันที่ และ Subfolder เป็น ชั่วโมง-นาที-วินาที
+          DATE_FOLDER=$(TZ='Asia/Bangkok' date +'%Y-%m-%d')
+          TIME_FOLDER=$(TZ='Asia/Bangkok' date +'%H-%M-%S')
+          
+          # ผสมเป็น Path ปลายทาง: CNBC/YYYY-MM-DD/HH-MM-SS
+          TARGET_FOLDER="CNBC/$DATE_FOLDER/$TIME_FOLDER"
           
           echo "=== กำลังย้ายไฟล์ทั้งหมดเข้าโฟลเดอร์: $TARGET_FOLDER ==="
           
