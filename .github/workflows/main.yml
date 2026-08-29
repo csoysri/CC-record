@@ -46,6 +46,7 @@ jobs:
       - name: Setup Rclone and Upload
         env:
           RCLONE_CONF_DATA: ${{ secrets.RCLONE_CONFIG }}
+          RECORD_NAME: 'CC-Radio'  # 👈 กำหนดชื่อรายการ/สถานีตรงนี้ (เปลี่ยนชื่อได้ตามต้องการ)
         run: |
           mkdir -p ~/.config/rclone
           echo "$RCLONE_CONF_DATA" > ~/.config/rclone/rclone.conf
@@ -54,8 +55,8 @@ jobs:
           DATE_FOLDER=$(TZ='Asia/Bangkok' date +'%Y-%m-%d')
           TIME_FOLDER=$(TZ='Asia/Bangkok' date +'%H-%M-%S')
           
-          # ผสมเป็น Path ปลายทาง: CNBC/YYYY-MM-DD/HH-MM-SS
-          TARGET_FOLDER="CNBC/$DATE_FOLDER/$TIME_FOLDER"
+          # ผสมเป็น Path ปลายทาง: CNBC/ชื่อรายการ/วันที่/เวลา
+          TARGET_FOLDER="CNBC/$RECORD_NAME/$DATE_FOLDER/$TIME_FOLDER"
           
           echo "=== กำลังย้ายไฟล์ทั้งหมดเข้าโฟลเดอร์: $TARGET_FOLDER ==="
           
