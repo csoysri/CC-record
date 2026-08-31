@@ -10,7 +10,7 @@ from google import genai
 
 TARGET_URL = "https://cdn-fr1-eu.lncoperations.ee/hls/cnbc_live/index.m3u8" 
 
-# 🛠️ ตั้งเวลาทดสอบ: อัด 30 วินาที / ตัดท่อนละ 15 วินาที
+# 🛠️ ตั้งเวลาทดสอบ: อัด 30 วินาที / ตัดท่อนละ 15 วินาที (เปลี่ยนกลับเป็น 10800 / 420 ได้ตามต้องการ)
 RECORD_DURATION = 10800  
 SEGMENT_DURATION = 420  
 
@@ -22,7 +22,7 @@ def record_stream(output_filename, duration):
     """บันทึกเสียงสดจาก CNBC เป็นไฟล์ .mp3"""
     print("🤖 เริ่มต้นทำงานระบบบันทึกเสียงอัตโนมัติ...")
     print(f"🎙️ กำลังบันทึกเสียงเป็นไฟล์ MP3 เป็นเวลา {duration} วินาที...")
-    
+
     headers = (
         "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36\r\n"
         "Referer: https://livenewschat.eu/\r\n"
@@ -42,19 +42,19 @@ def record_stream(output_filename, duration):
         '-b:a', '128k',
         output_filename
     ]
-    
+
     result = subprocess.run(cmd, capture_output=True, text=True)
     if result.returncode != 0:
         print(f"❌ FFmpeg Error:\n{result.stderr}")
         return False
-        
+
     return os.path.exists(output_filename) and os.path.getsize(output_filename) > 0
 
 def split_audio(input_file, date_prefix, segment_time=15):
     """ตัดแบ่งไฟล์เสียง .mp3"""
     print(f"\n✂️ กำลังตัดแบ่งไฟล์ '{input_file}' เป็นท่อนละ {segment_time} วินาที...")
     output_pattern = f"./{date_prefix}_part_%03d.mp3"
-    
+
     cmd = [
         'ffmpeg', '-y',
         '-i', input_file,
@@ -75,11 +75,11 @@ def transcribe_and_translate(audio_path, max_retries=3):
         return None
 
     print(f"  🤖 [1/3] กำลังส่งเสียงให้ Gemini ฟังและแปลไทย...")
-    
+
     for attempt in range(1, max_retries + 1):
         try:
             audio_file = client.files.upload(file=audio_path)
-            
+
             prompt = """
             คำสั่งสำคัญที่สุด: ผลลัพธ์ของคุณต้องเป็น "ภาษาไทยล้วน 100%" เท่านั้น
             1. ฟังเสียงพูดภาษาอังกฤษทั้งหมด แล้วแปลบทพูดทุกประโยคออกมาเป็นภาษาไทยโดยตรง
@@ -90,15 +90,15 @@ def transcribe_and_translate(audio_path, max_retries=3):
             6. ให้ส่งออกเฉพาะข้อความภาษาไทยที่อ่านได้อย่างต่อเนื่อง สละสลวย เท่านั้น
             7. ลบภาษาอังกฤษออก
             """
-            
+
             response = client.models.generate_content(
                 model='gemini-3.5-flash-lite',
                 contents=[audio_file, prompt]
             )
-            
+
             client.files.delete(name=audio_file.name)
             return response.text
-            
+
         except Exception as e:
             print(f"  ⚠️ ครั้งที่ {attempt} พบปัญหา ({e})")
             if attempt < max_retries:
@@ -114,8 +114,10 @@ async def text_to_speech_thai(text, output_audio_path):
         tts = edge_tts.Communicate(text, voice)
         await tts.save(output_audio_path)
         print(f"  ✅ บันทึกเสียงพากย์ไทยสำเร็จ!")
+        return True
     except Exception as e:
         print(f"  ❌ สังเคราะห์เสียงอ่านข่าวล้มเหลว: {e}")
+        return False
 
 def process_single_file(seg_path, current_idx, total_files):
     print(f"==================================================")
@@ -124,7 +126,7 @@ def process_single_file(seg_path, current_idx, total_files):
 
     th_text = transcribe_and_translate(seg_path)
     if not th_text:
-        return
+        return None
 
     txt_filename = seg_path.replace(".mp3", "_แปลไทย.txt")
     with open(txt_filename, "w", encoding="utf-8") as f:
@@ -132,13 +134,53 @@ def process_single_file(seg_path, current_idx, total_files):
     print(f"  💾 [2/3] บันทึกคำแปลข้อความ: {txt_filename}")
 
     tts_filename = seg_path.replace(".mp3", "_อ่านข่าวไทย.mp3")
-    asyncio.run(text_to_speech_thai(th_text, tts_filename))
+    success = asyncio.run(text_to_speech_thai(th_text, tts_filename))
     print(f"🎉 เสร็จสิ้นขั้นตอนของไฟล์ [{current_idx}/{total_files}]\n")
+    
+    # ส่งคืนชื่อไฟล์ tts กลับไปเพื่อเก็บรวบรวม
+    if success:
+        return tts_filename
+    return None
+
+def merge_tts_files(tts_files, output_filename):
+    """รวมไฟล์ MP3 เสียงพากย์ไทยหลายๆ ไฟล์เข้าด้วยกัน"""
+    if not tts_files:
+        return
+
+    print(f"🔗 กำลังรวมไฟล์เสียงอ่านข่าวทั้งหมดเป็นไฟล์เดียว...")
+    list_filename = "concat_list.txt"
+    
+    # สร้างไฟล์ list สำหรับ ffmpeg concat
+    with open(list_filename, "w", encoding="utf-8") as f:
+        for tts_file in tts_files:
+            # ใช้ absolute path หรือ relative path ที่ถูกต้องสำหรับ FFmpeg
+            f.write(f"file '{tts_file}'\n")
+
+    cmd = [
+        'ffmpeg', '-y',
+        '-f', 'concat',
+        '-safe', '0',
+        '-i', list_filename,
+        '-c', 'copy',
+        output_filename
+    ]
+    
+    subprocess.run(cmd, capture_output=True)
+    
+    # ลบไฟล์ list ทิ้ง
+    if os.path.exists(list_filename):
+        os.remove(list_filename)
+        
+    if os.path.exists(output_filename):
+        print(f"🎧 รวมไฟล์เสร็จสมบูรณ์! รับฟังได้ที่: {output_filename}")
+    else:
+        print("❌ เกิดข้อผิดพลาดในการรวมไฟล์เสียง")
 
 if __name__ == "__main__":
     th_time = datetime.now(ZoneInfo("Asia/Bangkok"))
     date_str = th_time.strftime('%Y%m%d_%H%M%S')
     main_file = f"./raw_cnbc_{date_str}.mp3"
+    final_output_file = f"./final_thai_news_{date_str}.mp3"
 
     success = record_stream(main_file, RECORD_DURATION)
 
@@ -147,10 +189,20 @@ if __name__ == "__main__":
         segment_files = split_audio(main_file, date_str, SEGMENT_DURATION)
         total_segments = len(segment_files)
         
+        # ลิสต์เก็บชื่อไฟล์เสียงพากย์ไทยที่สร้างเสร็จแล้ว
+        generated_tts_files = []
+
         for idx, seg in enumerate(segment_files, start=1):
-            process_single_file(seg, idx, total_segments)
+            tts_file = process_single_file(seg, idx, total_segments)
+            if tts_file:
+                generated_tts_files.append(tts_file)
             time.sleep(2)
-            
+
         print("✨ ประมวลผลครบทุกไฟล์เรียบร้อยแล้ว!")
+        
+        # เมื่อประมวลผลครบทุกไฟล์ ให้รวมไฟล์ทั้งหมดเป็นไฟล์เดียว
+        if generated_tts_files:
+            merge_tts_files(generated_tts_files, final_output_file)
+            
     else:
         print("❌ การบันทึกเสียงล้มเหลว")
