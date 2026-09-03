@@ -2,7 +2,7 @@ name: CC Radio Auto Recorder
 
 on:
   schedule:
-    - cron: '00 11 * * *' # ห่าง 13 ชม.รันตี 2:00 ทุกวัน (เวลาไทย)
+    - cron: '00 13 * * *' # ห่าง 13 ชม.รันตี 2:00 ทุกวัน (เวลาไทย)
   workflow_dispatch:
 
 jobs:
