@@ -10,7 +10,7 @@ from google import genai
 
 TARGET_URL = "https://cdn-fr1-eu.lncoperations.ee/hls/cnbc_live/index.m3u8" 
 
-# 🛠️ ตั้งเวลาทดสอบ: อัด 30 วินาที / ตัดท่อนละ 15 วินาที (เปลี่ยนกลับเป็น 10800 / 420 ได้ตามต้องการ)
+# 🛠️ ตั้งเวลา: RECORD_DURATION (วินาที) / SEGMENT_DURATION (วินาที)
 RECORD_DURATION = 10800  
 SEGMENT_DURATION = 420  
 
@@ -28,12 +28,12 @@ def record_stream(output_filename, duration):
         "Referer: https://livenewschat.eu/\r\n"
     )
 
+    # ปรับแต่ง flag ป้องกัน hls โหลด chunk ซ้ำซ้อน
     cmd = [
         'ffmpeg', '-y',
         '-headers', headers,
         '-protocol_whitelist', 'file,http,https,tcp,tls,crypto',
         '-reconnect', '1',
-        '-reconnect_streamed', '1',
         '-reconnect_delay_max', '5',
         '-i', TARGET_URL,
         '-t', str(duration),
@@ -50,16 +50,18 @@ def record_stream(output_filename, duration):
 
     return os.path.exists(output_filename) and os.path.getsize(output_filename) > 0
 
-def split_audio(input_file, date_prefix, segment_time=15):
-    """ตัดแบ่งไฟล์เสียง .mp3"""
+def split_audio(input_file, date_prefix, segment_time=420):
+    """ตัดแบ่งไฟล์เสียง .mp3 พร้อม Reset Timestamps"""
     print(f"\n✂️ กำลังตัดแบ่งไฟล์ '{input_file}' เป็นท่อนละ {segment_time} วินาที...")
     output_pattern = f"./{date_prefix}_part_%03d.mp3"
 
+    # เพิ่ม -reset_timestamps 1 ป้องกันเสียงคาบเกี่ยวตรงรอยต่อ
     cmd = [
         'ffmpeg', '-y',
         '-i', input_file,
         '-f', 'segment',
         '-segment_time', str(segment_time),
+        '-reset_timestamps', '1',
         '-c', 'copy',
         output_pattern
     ]
@@ -91,8 +93,9 @@ def transcribe_and_translate(audio_path, max_retries=3):
             7. ลบภาษาอังกฤษออก
             """
 
+            # แนะนำใช้โมเดลมาตรฐาน gemini-2.5-flash หรือ gemini-1.5-flash
             response = client.models.generate_content(
-                model='gemini-3.5-flash-lite',
+                model='gemini-2.5-flash',
                 contents=[audio_file, prompt]
             )
 
@@ -137,41 +140,44 @@ def process_single_file(seg_path, current_idx, total_files):
     success = asyncio.run(text_to_speech_thai(th_text, tts_filename))
     print(f"🎉 เสร็จสิ้นขั้นตอนของไฟล์ [{current_idx}/{total_files}]\n")
     
-    # ส่งคืนชื่อไฟล์ tts กลับไปเพื่อเก็บรวบรวม
     if success:
         return tts_filename
     return None
 
 def merge_tts_files(tts_files, output_filename):
-    """รวมไฟล์ MP3 เสียงพากย์ไทยหลายๆ ไฟล์เข้าด้วยกัน"""
+    """รวมไฟล์ MP3 เสียงพากย์ไทย พร้อม Re-encode ป้องกันเสียงกระตุกหรือวนซ้ำ"""
     if not tts_files:
         return
 
     print(f"🔗 กำลังรวมไฟล์เสียงอ่านข่าวทั้งหมดเป็นไฟล์เดียว...")
     list_filename = "concat_list.txt"
     
-    # สร้างไฟล์ list สำหรับ ffmpeg concat
+    # ดึง Full Path เพื่อป้องกันปัญหา FFmpeg Concat หาไฟล์ไม่เจอ
     with open(list_filename, "w", encoding="utf-8") as f:
         for tts_file in tts_files:
-            # ใช้ absolute path หรือ relative path ที่ถูกต้องสำหรับ FFmpeg
-            f.write(f"file '{tts_file}'\n")
+            abs_path = os.path.abspath(tts_file).replace('\\', '/')
+            f.write(f"file '{abs_path}'\n")
 
+    # 🛠️ จุดสำคัญ: ใช้ libmp3lame ในการ re-encode แทน copy
+    # วิธีนี้จะล้าง Header ซ้ำซ้อนของ edge-tts ออกทั้งหมด ทำให้เสียงต่อกันเนียนสนิท
     cmd = [
         'ffmpeg', '-y',
         '-f', 'concat',
         '-safe', '0',
         '-i', list_filename,
-        '-c', 'copy',
+        '-c:a', 'libmp3lame',
+        '-b:a', '128k',
         output_filename
     ]
     
-    subprocess.run(cmd, capture_output=True)
-    
-    # ลบไฟล์ list ทิ้ง
+    res = subprocess.run(cmd, capture_output=True, text=True)
+    if res.returncode != 0:
+        print(f"❌ รวมไฟล์ผิดพลาด:\n{res.stderr}")
+
     if os.path.exists(list_filename):
         os.remove(list_filename)
         
-    if os.path.exists(output_filename):
+    if os.path.exists(output_filename) and os.path.getsize(output_filename) > 0:
         print(f"🎧 รวมไฟล์เสร็จสมบูรณ์! รับฟังได้ที่: {output_filename}")
     else:
         print("❌ เกิดข้อผิดพลาดในการรวมไฟล์เสียง")
@@ -189,7 +195,6 @@ if __name__ == "__main__":
         segment_files = split_audio(main_file, date_str, SEGMENT_DURATION)
         total_segments = len(segment_files)
         
-        # ลิสต์เก็บชื่อไฟล์เสียงพากย์ไทยที่สร้างเสร็จแล้ว
         generated_tts_files = []
 
         for idx, seg in enumerate(segment_files, start=1):
@@ -200,7 +205,6 @@ if __name__ == "__main__":
 
         print("✨ ประมวลผลครบทุกไฟล์เรียบร้อยแล้ว!")
         
-        # เมื่อประมวลผลครบทุกไฟล์ ให้รวมไฟล์ทั้งหมดเป็นไฟล์เดียว
         if generated_tts_files:
             merge_tts_files(generated_tts_files, final_output_file)
             
