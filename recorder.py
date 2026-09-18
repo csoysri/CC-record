@@ -184,7 +184,7 @@ def concat_audio_files(input_files, output_filename):
 def merge_and_cleanup_tts(tts_files, final_output_filename, folder_name):
     """
     รวมไฟล์เสียงอ่านข่าวโดยแบ่งทำทีละ 10 ไฟล์ 
-    เพื่อลดภาระของ FFmpeg และป้องกันข้อผิดพลาดเมื่อรวมไฟล์จำนวนมาก
+    (คงไฟล์เสียงอ่านข่าวไทยย่อยไว้ทั้งหมด ไม่ลบทิ้ง)
     """
     print(f"==================================================")
     print(f"🔗 กำลังรวมไฟล์เสียงทั้งหมด {len(tts_files)} ไฟล์ (แบ่งทำทีละ 10 ไฟล์)...")
@@ -193,16 +193,16 @@ def merge_and_cleanup_tts(tts_files, final_output_filename, folder_name):
         print("⚠️ ไม่มีไฟล์เสียงสำหรับรวม")
         return
 
-    # กรณีมีไฟล์เดียว
+    # กรณีมีไฟล์เดียว ใช้ shutil.copy เพื่อไม่ให้ไฟล์ต้นทางหาย
     if len(tts_files) == 1:
-        shutil.move(tts_files[0], final_output_filename)
+        shutil.copy(tts_files[0], final_output_filename)
         print(f"✅ มีเพียงไฟล์เดียว บันทึกสำเร็จ: {final_output_filename}")
         return
 
     batch_size = 10
     intermediate_files = []
 
-    # 1. แบ่งกลุ่มไฟล์ทีละ 10 ไฟล์
+    # 1. แบ่งกลุ่มไฟล์ทีละ 10 ไฟล์ (ไม่ลบไฟล์ tts ย่อย)
     for i in range(0, len(tts_files), batch_size):
         batch = tts_files[i:i + batch_size]
         batch_num = (i // batch_size) + 1
@@ -213,12 +213,6 @@ def merge_and_cleanup_tts(tts_files, final_output_filename, folder_name):
 
         if success:
             intermediate_files.append(temp_output)
-            # ลบไฟล์ย่อยเฉพาะใน batch ที่รวมสำเร็จแล้ว
-            for f in batch:
-                try:
-                    os.remove(f)
-                except Exception:
-                    pass
         else:
             print(f"  ❌ รวมกลุ่มที่ {batch_num} ล้มเหลว!")
 
@@ -238,11 +232,11 @@ def merge_and_cleanup_tts(tts_files, final_output_filename, folder_name):
         
         if final_success:
             print(f"✅ รวมไฟล์สำเร็จสมบูรณ์: {final_output_filename}")
-            # ลบไฟล์ temp_batch ทิ้ง
+            # ลบเฉพาะไฟล์ temp_batch ชั่วคราวทิ้ง (ไฟล์เสียงอ่านข่าวย่อยยังอยู่ครบ)
             for f in intermediate_files:
                 try:
                     os.remove(f)
-                    print(f"  🗑️ ลบไฟล์กลุ่มย่อย: {os.path.basename(f)}")
+                    print(f"  🗑️ ลบไฟล์ชั่วคราว: {os.path.basename(f)}")
                 except Exception:
                     pass
         else:
